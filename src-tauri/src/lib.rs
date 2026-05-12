@@ -31,6 +31,7 @@ pub fn run() {
             commands::check_workspace,
             commands::list_conversations,
             commands::create_conversation,
+            commands::get_conversation_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,10 +9,16 @@ export default function ServerBar({ serverUrl, status, onServerUrlCommit, onRetr
     if (draft.trim() && draft !== serverUrl) onServerUrlCommit(draft.trim());
   };
 
+  const label = status === 'ok'
+    ? '已连接'
+    : status === 'error'
+      ? '无法连接'
+      : '未检测';
+
   return (
     <div className="server-bar">
       <label className="field grow">
-        <span>Relay server</span>
+        <span>中转服务器</span>
         <input
           type="text"
           value={draft}
@@ -25,9 +31,9 @@ export default function ServerBar({ serverUrl, status, onServerUrlCommit, onRetr
       </label>
       <div className={`status status-${status}`}>
         <span className="dot" />
-        {status === 'ok' ? 'connected' : status === 'error' ? 'unreachable' : 'unknown'}
+        {label}
       </div>
-      <button className="btn ghost" onClick={onRetry}>Retry</button>
+      <button className="btn ghost" onClick={onRetry}>重试</button>
     </div>
   );
 }

@@ -133,6 +133,59 @@ impl ConversationStore {
         Ok(())
     }
 
+    fn history_path(workspace_root: &Path, conversation_id: &str) -> PathBuf {
+        workspace_root
+            .join(".aiagent")
+            .join("conversations")
+            .join(format!("{conversation_id}.jsonl"))
+    }
+
+    /// Append one log entry (arbitrary JSON) to the conversation's history file.
+    /// Each entry is one JSONL line; readers re-parse line-by-line.
+    pub fn append_history(
+        workspace_root: &Path,
+        conversation_id: &str,
+        entry: &serde_json::Value,
+    ) -> Result<(), String> {
+        use std::io::Write;
+        let path = Self::history_path(workspace_root, conversation_id);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir history dir: {e}"))?;
+        }
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| format!("open history: {e}"))?;
+        let line = serde_json::to_string(entry).map_err(|e| format!("encode: {e}"))?;
+        writeln!(f, "{line}").map_err(|e| format!("write history: {e}"))?;
+        Ok(())
+    }
+
+    /// Read the full conversation history (one JSON value per line).
+    pub fn read_history(
+        workspace_root: &Path,
+        conversation_id: &str,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let path = Self::history_path(workspace_root, conversation_id);
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("read history: {e}"))?;
+        let mut out = Vec::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<serde_json::Value>(line) {
+                Ok(v) => out.push(v),
+                Err(_) => continue, // skip malformed line
+            }
+        }
+        Ok(out)
+    }
+
     pub fn touch(workspace_root: &Path, conversation_id: &str) -> Result<(), String> {
         let mut store = Self::load(workspace_root)?;
         for c in store.conversations.iter_mut() {

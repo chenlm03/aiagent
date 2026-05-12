@@ -110,6 +110,25 @@ impl ServerClient {
             .await?)
     }
 
+    pub async fn get_history(
+        &self,
+        conversation_id: &str,
+        workspace_root: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        Ok(self
+            .http
+            .get(format!(
+                "{}/api/conversations/{}/history",
+                self.base, conversation_id
+            ))
+            .query(&[("workspace_root", workspace_root)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
     pub async fn cancel(&self, session_id: &str) -> anyhow::Result<bool> {
         Ok(self
             .http

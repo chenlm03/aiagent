@@ -15,7 +15,7 @@ export default function App() {
   const [installed, setInstalled] = useState({});
 
   const [workspaceRoot, setWorkspaceRoot] = useState('');
-  const [workspaceStatus, setWorkspaceStatus] = useState('unknown'); // unknown | ok | error
+  const [workspaceStatus, setWorkspaceStatus] = useState('unknown');
   const [workspaceError, setWorkspaceError] = useState('');
 
   const [conversations, setConversations] = useState([]);
@@ -32,10 +32,13 @@ export default function App() {
       const cfg = await invoke('load_config').catch(() => ({}));
       if (cfg.server_url) setServerUrl(cfg.server_url);
       if (cfg.workspace_root) setWorkspaceRoot(cfg.workspace_root);
-      if (cfg.active_conversation_id) setActiveConvId(cfg.active_conversation_id);
       await refreshFromServer(cfg.active_provider);
       if (cfg.workspace_root) {
         await refreshWorkspace(cfg.workspace_root);
+      }
+      if (cfg.active_conversation_id && cfg.workspace_root) {
+        setActiveConvId(cfg.active_conversation_id);
+        await loadHistory(cfg.active_conversation_id, cfg.workspace_root);
       }
     })();
   }, []);
@@ -86,7 +89,7 @@ export default function App() {
       const check = await invoke('check_workspace', { workspaceRoot: root });
       if (!check.ok) {
         setWorkspaceStatus('error');
-        setWorkspaceError(check.message || 'workspace error');
+        setWorkspaceError(check.message || '工作区出错');
         setConversations([]);
         return;
       }
@@ -98,6 +101,22 @@ export default function App() {
       setWorkspaceStatus('error');
       setWorkspaceError(String(err));
       setConversations([]);
+    }
+  };
+
+  const loadHistory = async (convId, root) => {
+    if (!convId || !root) {
+      setMessages([]);
+      return;
+    }
+    try {
+      const events = await invoke('get_conversation_history', {
+        conversationId: convId,
+        workspaceRoot: root,
+      });
+      setMessages(events);
+    } catch (err) {
+      setMessages([{ type: 'error', message: `加载历史失败：${err}` }]);
     }
   };
 
@@ -126,26 +145,26 @@ export default function App() {
     await refreshWorkspace(root);
   };
 
-  const onSelectConv = (id) => {
+  const onSelectConv = async (id) => {
     setActiveConvId(id);
-    setMessages([]);
     persistConfig({ active_conversation_id: id });
+    await loadHistory(id, workspaceRoot);
   };
 
   const onNewConv = async () => {
     if (workspaceStatus !== 'ok' || !providerId) return;
     try {
       const conv = await invoke('create_conversation', {
-        workspaceRoot: workspaceRoot,
+        workspaceRoot,
         providerId,
         name: null,
       });
       setConversations((prev) => [...prev, conv]);
       setActiveConvId(conv.id);
-      setMessages([{ type: 'meta_info', text: `New conversation: ${conv.name}  (cwd: ${conv.subdir})` }]);
+      setMessages([{ type: 'meta_info', text: `新会话已创建：${conv.name}（目录：${conv.subdir}）` }]);
       persistConfig({ active_conversation_id: conv.id });
     } catch (err) {
-      setMessages((prev) => [...prev, { type: 'error', message: `create conversation: ${err}` }]);
+      setMessages((prev) => [...prev, { type: 'error', message: `创建会话失败：${err}` }]);
     }
   };
 
@@ -161,7 +180,7 @@ export default function App() {
           providerId,
           prompt,
           conversationId: activeConvId,
-          workspaceRoot: workspaceRoot,
+          workspaceRoot,
           providerConfig: {},
         },
       });
@@ -220,9 +239,11 @@ export default function App() {
           <main className="messages">
             {messages.length === 0 && (
               <div className="empty">
-                {!activeConvId ? 'Select or create a conversation in the sidebar.' :
-                  serverStatus === 'ok' ? 'Send a message to start.' :
-                  'Connect to a server first.'}
+                {!activeConvId
+                  ? '在左侧选择或新建一个会话。'
+                  : serverStatus === 'ok'
+                    ? '输入消息开始对话。'
+                    : '请先连接服务器。'}
               </div>
             )}
             {messages.map((m, i) => <MessageRow key={i} msg={m} />)}
@@ -233,8 +254,8 @@ export default function App() {
             <textarea
               value={input}
               placeholder={activeConvId
-                ? 'Ask anything…  (Ctrl/Cmd+Enter to send)'
-                : 'Select a conversation first'
+                ? '说点什么…（Ctrl/Cmd + Enter 发送）'
+                : '请先选择一个会话'
               }
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -247,13 +268,13 @@ export default function App() {
             />
             <div className="actions">
               {busy ? (
-                <button className="btn cancel" onClick={cancel}>Cancel</button>
+                <button className="btn cancel" onClick={cancel}>取消</button>
               ) : (
                 <button
                   className="btn send"
                   onClick={send}
                   disabled={!canSend || !input.trim()}
-                >Send</button>
+                >发送</button>
               )}
             </div>
           </footer>

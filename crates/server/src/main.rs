@@ -55,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/workspace/check", get(check_workspace))
         .route("/api/conversations", get(list_conversations))
         .route("/api/conversations", post(create_conversation))
+        .route("/api/conversations/:id/history", get(get_history))
         .route("/api/chat", post(chat))
         .route("/api/cancel/:session_id", post(cancel))
         .with_state(state)
@@ -132,6 +133,15 @@ async fn create_conversation(
     .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+async fn get_history(
+    Path(id): Path<String>,
+    Query(q): Query<WorkspaceQuery>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, String)> {
+    ConversationStore::read_history(&PathBuf::from(&q.workspace_root), &id)
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatRequest {
     provider_id: String,
@@ -188,6 +198,17 @@ async fn chat(
     let cancel = CancellationToken::new();
     state.sessions.register(session_id.clone(), cancel.clone());
 
+    // Persist the user's prompt as the first entry of this turn.
+    let _ = ConversationStore::append_history(
+        &workspace_root,
+        &conv.id,
+        &serde_json::json!({
+            "type": "user",
+            "session_id": session_id,
+            "delta": req.prompt,
+        }),
+    );
+
     let opts = agent::SendOptions {
         session_id: session_id.clone(),
         prompt: req.prompt,
@@ -220,6 +241,14 @@ async fn chat(
                     &workspace_for_persist,
                     &conv_id_for_persist,
                     provider_session_id,
+                );
+            }
+            // Append every event to the conversation log so replay works.
+            if let Ok(v) = serde_json::to_value(&evt) {
+                let _ = ConversationStore::append_history(
+                    &workspace_for_persist,
+                    &conv_id_for_persist,
+                    &v,
                 );
             }
             if tx_for_run.send(evt).await.is_err() {

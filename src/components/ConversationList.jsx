@@ -4,11 +4,11 @@ export default function ConversationList({ conversations, activeId, canCreate, o
   return (
     <div className="conv-list">
       <button className="btn ghost block" onClick={onNew} disabled={!canCreate}>
-        + New conversation
+        + 新建会话
       </button>
       <div className="conv-items">
         {sorted.length === 0 && (
-          <div className="conv-empty">No conversations yet.</div>
+          <div className="conv-empty">暂无会话</div>
         )}
         {sorted.map((c) => (
           <button
@@ -19,7 +19,7 @@ export default function ConversationList({ conversations, activeId, canCreate, o
           >
             <div className="conv-name">{c.name}</div>
             <div className="conv-meta">
-              {c.provider_session_id ? '↻ resume' : '✦ new'} · {c.subdir}
+              {c.provider_session_id ? '↻ 续接' : '✦ 新建'} · {c.subdir}
             </div>
           </button>
         ))}
