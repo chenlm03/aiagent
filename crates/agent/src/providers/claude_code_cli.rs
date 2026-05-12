@@ -54,13 +54,24 @@ impl AgentProvider for ClaudeCodeCli {
             .get("resume")
             .and_then(|v| v.as_str())
             .map(String::from);
+        // Headless mode has no human to answer permission prompts. Default to
+        // bypassPermissions; user can pick a stricter mode via provider_config
+        // (e.g. "acceptEdits" with --allowedTools in extra_args).
+        let permission_mode: String = opts
+            .provider_config
+            .get("permission_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| "bypassPermissions".into());
 
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
             .arg(&opts.prompt)
             .arg("--output-format")
             .arg("stream-json")
-            .arg("--verbose");
+            .arg("--verbose")
+            .arg("--permission-mode")
+            .arg(&permission_mode);
         if let Some(id) = &resume_id {
             cmd.arg("--resume").arg(id);
         }

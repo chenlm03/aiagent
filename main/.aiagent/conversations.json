@@ -1,0 +1,13 @@
+{
+  "conversations": [
+    {
+      "id": "conv-1778579351-43025f11",
+      "name": "Session 43025f11",
+      "provider_id": "claude-code-cli",
+      "subdir": "conv-1778579351-43025f11",
+      "provider_session_id": "5c538857-503a-4c00-9d74-93bf568d4bb4",
+      "created_at": 1778579351,
+      "updated_at": 1778579537
+    }
+  ]
+}
