@@ -70,14 +70,15 @@ pub async fn send_message(
 
     let sessions = state.sessions.clone();
     let app_clone = app.clone();
+    let local_id_for_task = local_id.clone();
     tokio::spawn(async move {
-        match client.chat_stream(app_clone, body, cancel).await {
+        match client.chat_stream(app_clone.clone(), body, cancel).await {
             Ok(_) => {}
             Err(e) => {
-                tracing_emit(&app, &format!("chat_stream error: {e}"));
+                tracing_emit(&app_clone, &format!("chat_stream error: {e}"));
             }
         }
-        sessions.remove(&local_id);
+        sessions.remove(&local_id_for_task);
     });
 
     Ok(local_id)
