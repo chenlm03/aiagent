@@ -15,3 +15,7 @@ Thumbs.db
 # Local config
 .env
 .env.local
+
+# Server-side workspace metadata (not source)
+.aiagent/
+/main/
