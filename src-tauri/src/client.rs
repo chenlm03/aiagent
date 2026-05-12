@@ -28,8 +28,10 @@ pub struct ServerClient {
 
 impl ServerClient {
     pub fn new(base_url: &str) -> Self {
+        // No overall request timeout — chat_stream is long-lived. Short ops
+        // (ping/list/detect) get a per-call timeout further down.
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(0)) // streaming: no overall timeout
+            .connect_timeout(Duration::from_secs(5))
             .build()
             .expect("reqwest client");
         Self {
