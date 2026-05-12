@@ -24,6 +24,10 @@ export default function MessageRow({ msg }) {
       return <div className="msg error">⚠ {msg.message}</div>;
     case 'finished':
       return <div className="msg meta">— done ({msg.reason}) —</div>;
+    case 'provider_session_id':
+      return <div className="msg meta">▣ provider session: {short(msg.provider_session_id)}</div>;
+    case 'meta_info':
+      return <div className="msg meta">{msg.text}</div>;
     default:
       return <div className="msg meta">{JSON.stringify(msg)}</div>;
   }

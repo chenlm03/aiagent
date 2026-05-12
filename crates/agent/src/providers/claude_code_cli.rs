@@ -49,14 +49,22 @@ impl AgentProvider for ClaudeCodeCli {
                     .collect()
             })
             .unwrap_or_default();
+        let resume_id: Option<String> = opts
+            .provider_config
+            .get("resume")
+            .and_then(|v| v.as_str())
+            .map(String::from);
 
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
             .arg(&opts.prompt)
             .arg("--output-format")
             .arg("stream-json")
-            .arg("--verbose")
-            .args(&extra_args)
+            .arg("--verbose");
+        if let Some(id) = &resume_id {
+            cmd.arg("--resume").arg(id);
+        }
+        cmd.args(&extra_args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -124,6 +132,20 @@ async fn emit_from_claude_jsonl(session_id: &str, line: &str, tx: &mpsc::Sender<
     };
 
     let kind = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
+
+    // Claude Code surfaces its own session id in two places:
+    //   - `system/init` line at the very start
+    //   - `result` line at the end
+    // Capture it from either; server uses it to feed --resume next turn.
+    if let Some(provider_session_id) = v.get("session_id").and_then(|x| x.as_str()) {
+        let _ = tx
+            .send(AgentEvent::ProviderSessionId {
+                session_id: session_id.into(),
+                provider_session_id: provider_session_id.into(),
+            })
+            .await;
+    }
+
     match kind {
         "assistant" => {
             if let Some(blocks) = v

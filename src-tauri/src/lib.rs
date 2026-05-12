@@ -28,6 +28,9 @@ pub fn run() {
             commands::load_config,
             commands::save_config,
             commands::ping_server,
+            commands::check_workspace,
+            commands::list_conversations,
+            commands::create_conversation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

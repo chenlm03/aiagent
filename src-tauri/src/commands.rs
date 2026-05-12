@@ -38,12 +38,43 @@ pub async fn detect_provider(provider_id: String) -> Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn check_workspace(workspace_root: String) -> Result<serde_json::Value, String> {
+    client_from_config()?
+        .check_workspace(&workspace_root)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_conversations(
+    workspace_root: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    client_from_config()?
+        .list_conversations(&workspace_root)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_conversation(
+    workspace_root: String,
+    provider_id: String,
+    name: Option<String>,
+) -> Result<serde_json::Value, String> {
+    client_from_config()?
+        .create_conversation(&workspace_root, &provider_id, name.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessageArgs {
     pub provider_id: String,
     pub prompt: String,
-    pub working_dir: Option<String>,
+    pub conversation_id: String,
+    pub workspace_root: String,
     #[serde(default)]
     pub provider_config: serde_json::Value,
 }
@@ -56,7 +87,6 @@ pub async fn send_message(
 ) -> Result<String, String> {
     let client = client_from_config()?;
 
-    // Local placeholder id used until the server hands back the real one.
     let local_id = Uuid::new_v4().to_string();
     let cancel = CancellationToken::new();
     state.sessions.insert(local_id.clone(), cancel.clone());
@@ -64,7 +94,8 @@ pub async fn send_message(
     let body = serde_json::json!({
         "provider_id": args.provider_id,
         "prompt": args.prompt,
-        "working_dir": args.working_dir,
+        "conversation_id": args.conversation_id,
+        "workspace_root": args.workspace_root,
         "provider_config": args.provider_config,
     });
 
@@ -72,11 +103,8 @@ pub async fn send_message(
     let app_clone = app.clone();
     let local_id_for_task = local_id.clone();
     tokio::spawn(async move {
-        match client.chat_stream(app_clone.clone(), body, cancel).await {
-            Ok(_) => {}
-            Err(e) => {
-                tracing_emit(&app_clone, &format!("chat_stream error: {e}"));
-            }
+        if let Err(e) = client.chat_stream(app_clone.clone(), body, cancel).await {
+            emit_error(&app_clone, &format!("chat_stream error: {e}"));
         }
         sessions.remove(&local_id_for_task);
     });
@@ -84,7 +112,7 @@ pub async fn send_message(
     Ok(local_id)
 }
 
-fn tracing_emit(app: &AppHandle, msg: &str) {
+fn emit_error(app: &AppHandle, msg: &str) {
     use tauri::Emitter;
     let _ = app.emit(
         "agent:event",
@@ -105,7 +133,6 @@ pub async fn cancel_session(
         token.cancel();
         Ok(true)
     } else {
-        // Maybe the server-side id; ask the server to cancel directly.
         let client = client_from_config()?;
         client.cancel(&session_id).await.map_err(|e| e.to_string())
     }

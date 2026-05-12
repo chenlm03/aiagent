@@ -10,6 +10,13 @@ pub enum AgentEvent {
     Started {
         session_id: String,
     },
+    /// Provider's own session identifier (e.g. Claude Code's session uuid).
+    /// Server uses this to persist on the conversation so the next turn can
+    /// pass --resume.
+    ProviderSessionId {
+        session_id: String,
+        provider_session_id: String,
+    },
     Text {
         session_id: String,
         delta: String,

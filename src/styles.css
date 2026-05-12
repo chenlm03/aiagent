@@ -34,6 +34,91 @@ body {
   height: 100vh;
 }
 
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 240px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.conv-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+}
+
+.btn.ghost.block { width: 100%; }
+
+.conv-items {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.conv-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px 6px;
+}
+
+.conv-item {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.conv-item:hover { background: var(--panel-2); }
+.conv-item.active {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+
+.conv-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conv-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muted { color: var(--muted); font-weight: normal; }
+.hint.full { width: 100%; flex-basis: 100%; }
+
 .app-header {
   padding: 12px 16px 8px;
   border-bottom: 1px solid var(--border);

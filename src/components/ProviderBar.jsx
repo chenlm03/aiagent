@@ -1,11 +1,22 @@
+import { useEffect, useState } from 'react';
+
 export default function ProviderBar({
   providers,
   installed,
   providerId,
   onProviderChange,
-  workingDir,
-  onWorkingDirChange,
+  workspaceRoot,
+  workspaceStatus,
+  workspaceError,
+  onWorkspaceCommit,
 }) {
+  const [draft, setDraft] = useState(workspaceRoot);
+  useEffect(() => { setDraft(workspaceRoot); }, [workspaceRoot]);
+
+  const commit = () => {
+    if (draft !== workspaceRoot) onWorkspaceCommit(draft.trim());
+  };
+
   const current = providers.find((p) => p.id === providerId);
 
   return (
@@ -22,17 +33,28 @@ export default function ProviderBar({
       </label>
 
       <label className="field grow">
-        <span>Working dir</span>
+        <span>
+          Workspace root <span className="muted">(absolute path on server)</span>
+        </span>
         <input
           type="text"
-          placeholder="(optional, defaults to app cwd)"
-          value={workingDir}
-          onChange={(e) => onWorkingDirChange(e.target.value)}
+          spellCheck={false}
+          placeholder="/home/nick/myproject"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
         />
       </label>
 
+      <div className={`status status-${workspaceStatus}`} title={workspaceError}>
+        <span className="dot" />
+        {workspaceStatus === 'ok' ? 'workspace ok' :
+          workspaceStatus === 'error' ? (workspaceError || 'workspace error') : 'unknown'}
+      </div>
+
       {current && (
-        <div className="hint">
+        <div className="hint full">
           <span className={`pill ${current.kind}`}>{current.kind}</span>
           <span className="desc">{current.description}</span>
         </div>

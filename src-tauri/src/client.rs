@@ -6,19 +6,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
-/// Same shape as `agent::AgentEvent` on the server. We deserialize into raw
-/// JSON and forward to the frontend so the UI doesn't need a Rust dep.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentEnvelope {
     pub session_id: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ProviderInfo {
-    pub id: String,
-    pub name: String,
-    pub kind: String,
-    pub description: String,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
 }
 
 pub struct ServerClient {
@@ -29,7 +21,7 @@ pub struct ServerClient {
 impl ServerClient {
     pub fn new(base_url: &str) -> Self {
         // No overall request timeout — chat_stream is long-lived. Short ops
-        // (ping/list/detect) get a per-call timeout further down.
+        // are guarded by connect_timeout only.
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .build()
@@ -46,45 +38,89 @@ impl ServerClient {
     }
 
     pub async fn list_providers(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        let res = self
+        Ok(self
             .http
             .get(format!("{}/api/providers", self.base))
             .send()
             .await?
             .error_for_status()?
             .json()
-            .await?;
-        Ok(res)
+            .await?)
     }
 
     pub async fn detect(&self, provider_id: &str) -> anyhow::Result<bool> {
-        let res = self
+        Ok(self
             .http
             .get(format!("{}/api/providers/{}/detect", self.base, provider_id))
             .send()
             .await?
             .error_for_status()?
             .json()
-            .await?;
-        Ok(res)
+            .await?)
+    }
+
+    pub async fn check_workspace(&self, workspace_root: &str) -> anyhow::Result<serde_json::Value> {
+        Ok(self
+            .http
+            .get(format!("{}/api/workspace/check", self.base))
+            .query(&[("workspace_root", workspace_root)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    pub async fn list_conversations(
+        &self,
+        workspace_root: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        Ok(self
+            .http
+            .get(format!("{}/api/conversations", self.base))
+            .query(&[("workspace_root", workspace_root)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    pub async fn create_conversation(
+        &self,
+        workspace_root: &str,
+        provider_id: &str,
+        name: Option<&str>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let mut body = serde_json::json!({
+            "workspace_root": workspace_root,
+            "provider_id": provider_id,
+        });
+        if let Some(n) = name {
+            body["name"] = serde_json::Value::String(n.into());
+        }
+        Ok(self
+            .http
+            .post(format!("{}/api/conversations", self.base))
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
     }
 
     pub async fn cancel(&self, session_id: &str) -> anyhow::Result<bool> {
-        let res = self
+        Ok(self
             .http
             .post(format!("{}/api/cancel/{}", self.base, session_id))
             .send()
             .await?
             .error_for_status()?
             .json()
-            .await?;
-        Ok(res)
+            .await?)
     }
 
-    /// Opens an SSE stream against POST /api/chat. The server first sends a
-    /// `session` event with the session id, then a series of `agent` events
-    /// each carrying one AgentEvent JSON payload. We re-emit each one to the
-    /// frontend via the Tauri event bus.
     pub async fn chat_stream(
         &self,
         app: AppHandle,
@@ -100,13 +136,13 @@ impl ServerClient {
             .error_for_status()?;
 
         let mut stream = response.bytes_stream().eventsource();
-        let mut session_id = String::new();
+        let mut server_session_id = String::new();
 
         loop {
             tokio::select! {
                 _ = cancel.cancelled() => {
-                    if !session_id.is_empty() {
-                        let _ = self.cancel(&session_id).await;
+                    if !server_session_id.is_empty() {
+                        let _ = self.cancel(&server_session_id).await;
                     }
                     break;
                 }
@@ -116,7 +152,7 @@ impl ServerClient {
                             match msg.event.as_str() {
                                 "session" => {
                                     if let Ok(env) = serde_json::from_str::<AgentEnvelope>(&msg.data) {
-                                        session_id = env.session_id;
+                                        server_session_id = env.session_id;
                                     }
                                 }
                                 "agent" | "" => {
@@ -124,13 +160,13 @@ impl ServerClient {
                                         let _ = app.emit("agent:event", payload);
                                     }
                                 }
-                                _ => { /* ignore unknown event types */ }
+                                _ => {}
                             }
                         }
                         Some(Err(e)) => {
                             let _ = app.emit("agent:event", serde_json::json!({
                                 "type": "error",
-                                "session_id": session_id,
+                                "session_id": server_session_id,
                                 "message": format!("stream error: {e}"),
                             }));
                             break;
@@ -141,6 +177,6 @@ impl ServerClient {
             }
         }
 
-        Ok(session_id)
+        Ok(server_session_id)
     }
 }

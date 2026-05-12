@@ -3,10 +3,12 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
-    /// Where the relay server lives. Defaults to http://127.0.0.1:8787.
+    /// Where the relay server lives. Defaults to http://127.0.0.1:8788.
     pub server_url: Option<String>,
     pub active_provider: Option<String>,
-    pub working_dir: Option<String>,
+    /// Workspace root on the SERVER. Conversation subdirs live under this.
+    pub workspace_root: Option<String>,
+    pub active_conversation_id: Option<String>,
 }
 
 impl AppConfig {
