@@ -151,6 +151,28 @@ export default function App() {
     await loadHistory(id, workspaceRoot);
   };
 
+  const onDeleteConv = async (conv) => {
+    const ok = window.confirm(
+      `确认删除会话「${conv.name}」吗？\n\n` +
+      `服务器上的目录 ${conv.subdir} 及其所有文件都会被删除，无法恢复。`
+    );
+    if (!ok) return;
+    try {
+      await invoke('delete_conversation', {
+        conversationId: conv.id,
+        workspaceRoot,
+      });
+      setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+      if (activeConvId === conv.id) {
+        setActiveConvId(null);
+        setMessages([]);
+        persistConfig({ active_conversation_id: null });
+      }
+    } catch (err) {
+      setMessages((prev) => [...prev, { type: 'error', message: `删除失败：${err}` }]);
+    }
+  };
+
   const onNewConv = async () => {
     if (workspaceStatus !== 'ok' || !providerId) return;
     try {
@@ -232,6 +254,7 @@ export default function App() {
             canCreate={workspaceStatus === 'ok' && !!providerId}
             onSelect={onSelectConv}
             onNew={onNewConv}
+            onDelete={onDeleteConv}
           />
         </aside>
 

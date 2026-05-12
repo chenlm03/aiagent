@@ -83,14 +83,12 @@ body {
 }
 
 .conv-item {
+  display: flex;
+  align-items: stretch;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--text);
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
+  overflow: hidden;
 }
 
 .conv-item:hover { background: var(--panel-2); }
@@ -98,6 +96,32 @@ body {
   background: var(--panel-2);
   border-color: var(--accent);
 }
+
+.conv-body {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.conv-del {
+  flex-shrink: 0;
+  width: 28px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.conv-item:hover .conv-del { visibility: visible; }
+.conv-del:hover { color: #e6645a; background: rgba(230, 100, 90, 0.1); }
 
 .conv-name {
   font-size: 13px;

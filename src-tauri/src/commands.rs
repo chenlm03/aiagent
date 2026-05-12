@@ -57,6 +57,17 @@ pub async fn list_conversations(
 }
 
 #[tauri::command]
+pub async fn delete_conversation(
+    conversation_id: String,
+    workspace_root: String,
+) -> Result<bool, String> {
+    client_from_config()?
+        .delete_conversation(&conversation_id, &workspace_root)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_conversation_history(
     conversation_id: String,
     workspace_root: String,

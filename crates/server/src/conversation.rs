@@ -186,6 +186,49 @@ impl ConversationStore {
         Ok(out)
     }
 
+    /// Delete a conversation: its subdirectory under workspace_root, its
+    /// history file, and its metadata entry. Returns Err if the conversation
+    /// doesn't exist or if the resolved subdir escapes the workspace.
+    pub fn delete(workspace_root: &Path, conversation_id: &str) -> Result<(), String> {
+        Self::validate_workspace(workspace_root)?;
+        let mut store = Self::load(workspace_root)?;
+        let idx = store
+            .conversations
+            .iter()
+            .position(|c| c.id == conversation_id)
+            .ok_or_else(|| format!("conversation not found: {conversation_id}"))?;
+        let conv = store.conversations[idx].clone();
+
+        // Path-safety: the subdir must be inside workspace_root after canonicalization.
+        let subdir_abs = workspace_root.join(&conv.subdir);
+        if subdir_abs.exists() {
+            let canon_root = workspace_root
+                .canonicalize()
+                .map_err(|e| format!("canonicalize workspace: {e}"))?;
+            let canon_sub = subdir_abs
+                .canonicalize()
+                .map_err(|e| format!("canonicalize subdir: {e}"))?;
+            if !canon_sub.starts_with(&canon_root) {
+                return Err(format!(
+                    "refusing to delete: subdir {} resolves outside workspace {}",
+                    canon_sub.display(),
+                    canon_root.display(),
+                ));
+            }
+            std::fs::remove_dir_all(&subdir_abs)
+                .map_err(|e| format!("remove subdir {}: {e}", subdir_abs.display()))?;
+        }
+
+        let history = Self::history_path(workspace_root, conversation_id);
+        if history.exists() {
+            let _ = std::fs::remove_file(&history);
+        }
+
+        store.conversations.remove(idx);
+        Self::save(workspace_root, &store)?;
+        Ok(())
+    }
+
     pub fn touch(workspace_root: &Path, conversation_id: &str) -> Result<(), String> {
         let mut store = Self::load(workspace_root)?;
         for c in store.conversations.iter_mut() {

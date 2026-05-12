@@ -9,7 +9,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use conversation::{Conversation, ConversationStore};
@@ -56,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/conversations", get(list_conversations))
         .route("/api/conversations", post(create_conversation))
         .route("/api/conversations/:id/history", get(get_history))
+        .route("/api/conversations/:id", delete(delete_conversation))
         .route("/api/chat", post(chat))
         .route("/api/cancel/:session_id", post(cancel))
         .with_state(state)
@@ -139,6 +140,15 @@ async fn get_history(
 ) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, String)> {
     ConversationStore::read_history(&PathBuf::from(&q.workspace_root), &id)
         .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+async fn delete_conversation(
+    Path(id): Path<String>,
+    Query(q): Query<WorkspaceQuery>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    ConversationStore::delete(&PathBuf::from(&q.workspace_root), &id)
+        .map(|()| Json(true))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 

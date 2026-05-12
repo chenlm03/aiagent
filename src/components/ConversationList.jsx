@@ -1,4 +1,11 @@
-export default function ConversationList({ conversations, activeId, canCreate, onSelect, onNew }) {
+export default function ConversationList({
+  conversations,
+  activeId,
+  canCreate,
+  onSelect,
+  onNew,
+  onDelete,
+}) {
   const sorted = [...conversations].sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
 
   return (
@@ -11,17 +18,26 @@ export default function ConversationList({ conversations, activeId, canCreate, o
           <div className="conv-empty">暂无会话</div>
         )}
         {sorted.map((c) => (
-          <button
+          <div
             key={c.id}
             className={`conv-item ${activeId === c.id ? 'active' : ''}`}
-            onClick={() => onSelect(c.id)}
             title={c.subdir}
           >
-            <div className="conv-name">{c.name}</div>
-            <div className="conv-meta">
-              {c.provider_session_id ? '↻ 续接' : '✦ 新建'} · {c.subdir}
-            </div>
-          </button>
+            <button className="conv-body" onClick={() => onSelect(c.id)}>
+              <div className="conv-name">{c.name}</div>
+              <div className="conv-meta">
+                {c.provider_session_id ? '↻ 续接' : '✦ 新建'} · {c.subdir}
+              </div>
+            </button>
+            <button
+              className="conv-del"
+              title="删除会话（含目录）"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(c);
+              }}
+            >×</button>
+          </div>
         ))}
       </div>
     </div>

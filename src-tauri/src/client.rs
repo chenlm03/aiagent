@@ -129,6 +129,25 @@ impl ServerClient {
             .await?)
     }
 
+    pub async fn delete_conversation(
+        &self,
+        conversation_id: &str,
+        workspace_root: &str,
+    ) -> anyhow::Result<bool> {
+        Ok(self
+            .http
+            .delete(format!(
+                "{}/api/conversations/{}",
+                self.base, conversation_id
+            ))
+            .query(&[("workspace_root", workspace_root)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
     pub async fn cancel(&self, session_id: &str) -> anyhow::Result<bool> {
         Ok(self
             .http
