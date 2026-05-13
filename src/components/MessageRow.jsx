@@ -18,8 +18,6 @@ export default function MessageRow({ msg }) {
   switch (msg.type) {
     case 'user':
       return <div className="msg user md"><Markdown>{msg.delta}</Markdown></div>;
-    case 'started':
-      return <div className="msg meta">▸ 会话开始（{short(msg.session_id)}）</div>;
     case 'text':
       return <div className="msg assistant md"><Markdown>{msg.delta}</Markdown></div>;
     case 'tool_call':
@@ -43,19 +41,16 @@ export default function MessageRow({ msg }) {
           <Markdown>{msg.message}</Markdown>
         </div>
       );
-    case 'finished':
-      return <div className="msg meta">— 完成（{msg.reason}） —</div>;
-    case 'provider_session_id':
-      return <div className="msg meta">▣ 模型会话 ID：{short(msg.provider_session_id)}</div>;
     case 'meta_info':
       return <div className="msg meta">{msg.text}</div>;
+    // Diagnostic events — kept in history JSONL but not rendered.
+    case 'started':
+    case 'finished':
+    case 'provider_session_id':
+      return null;
     default:
-      return <div className="msg meta">{JSON.stringify(msg)}</div>;
+      return null;
   }
-}
-
-function short(id) {
-  return (id || '').slice(0, 8);
 }
 
 function safeJson(v) {
