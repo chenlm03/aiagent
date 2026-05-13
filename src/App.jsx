@@ -247,7 +247,13 @@ export default function App() {
 
   const cancel = async () => {
     if (!sessionId) return;
-    await invoke('cancel_session', { sessionId });
+    // Optimistically release the UI; the synthetic 'finished' event from the
+    // client will also fire, but we don't want the user staring at a spinner
+    // while the cancel round-trip happens.
+    setBusy(false);
+    setThinkingBuf('');
+    setMessages((prev) => [...prev, { type: 'meta_info', text: '— 已取消 —' }]);
+    await invoke('cancel_session', { sessionId }).catch(() => {});
   };
 
   if (!authChecked) {

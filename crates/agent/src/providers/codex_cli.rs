@@ -53,10 +53,15 @@ impl AgentProvider for CodexCli {
 
         let mut cmd = Command::new("codex");
         // OpenAI Codex CLI: `codex exec "<prompt>"`.
-        // Adjust subcommand/flags here if your target binary differs.
+        // - `--skip-git-repo-check`: workspace subdirs aren't git repos, codex
+        //   would otherwise refuse to run.
+        // - stdin redirected to null: without this codex waits on stdin and
+        //   hangs forever in headless mode.
         cmd.arg("exec")
+            .arg("--skip-git-repo-check")
             .arg(&opts.prompt)
             .args(&extra_args)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);

@@ -259,6 +259,13 @@ impl ServerClient {
                     if !server_session_id.is_empty() {
                         let _ = self.cancel(&server_session_id).await;
                     }
+                    // Server's Finished may arrive after we drop the SSE stream;
+                    // synthesize one so the UI's busy state always resets.
+                    let _ = app.emit("agent:event", serde_json::json!({
+                        "type": "finished",
+                        "session_id": server_session_id,
+                        "reason": "cancelled",
+                    }));
                     break;
                 }
                 evt = stream.next() => {
