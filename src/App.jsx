@@ -92,7 +92,7 @@ export default function App() {
       if (['text', 'tool_call', 'error'].includes(evt.type)) {
         setThinkingBuf('');
       }
-      setMessages((prev) => [...prev, evt]);
+      setMessages((prev) => appendOrMergeText(prev, evt));
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
@@ -184,7 +184,8 @@ export default function App() {
     }
     try {
       const events = await invoke('get_conversation_history', { conversationId: convId });
-      setMessages(events);
+      const merged = events.reduce((acc, evt) => appendOrMergeText(acc, evt), []);
+      setMessages(merged);
     } catch (err) {
       setMessages([{ type: 'error', message: `加载历史失败：${err}` }]);
     }
@@ -440,4 +441,19 @@ export default function App() {
 
 function shortId(id) {
   return (id || '').slice(0, 8);
+}
+
+// Fold consecutive 'text' events from the same provider session into one
+// bubble. Without this, providers that stream stdout line-by-line (codex)
+// break markdown structure into one bubble per line.
+function appendOrMergeText(messages, evt) {
+  if (evt.type !== 'text') return [...messages, evt];
+  const last = messages[messages.length - 1];
+  if (last && last.type === 'text' && last.session_id === evt.session_id) {
+    return [
+      ...messages.slice(0, -1),
+      { ...last, delta: (last.delta || '') + (evt.delta || '') },
+    ];
+  }
+  return [...messages, evt];
 }
