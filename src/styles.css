@@ -493,6 +493,19 @@ body {
   font-size: 11px;
 }
 
+.login-card .row {
+  display: flex;
+  gap: 6px;
+}
+
+.login-card .row input { flex: 1; }
+
+.status.inline {
+  display: inline-flex;
+  margin-left: 8px;
+  font-size: 10px;
+}
+
 /* ---- modal ---- */
 
 .modal-overlay {
