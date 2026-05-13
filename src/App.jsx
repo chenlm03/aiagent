@@ -28,6 +28,7 @@ export default function App() {
 
   const [messages, setMessages] = useState([]);
   const [thinkingBuf, setThinkingBuf] = useState('');
+  const [diagBuf, setDiagBuf] = useState([]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -71,12 +72,27 @@ export default function App() {
         setThinkingBuf((prev) => prev + (evt.delta || ''));
         return;
       }
+      // Diagnostic events: shown live in the bottom strip while busy,
+      // dropped from the message list. Server-side JSONL still records them.
+      if (evt.type === 'started') {
+        setDiagBuf((prev) => [...prev, `▸ 会话：${shortId(evt.session_id)}`]);
+        return;
+      }
+      if (evt.type === 'provider_session_id') {
+        setDiagBuf((prev) => [...prev, `▣ 模型会话：${shortId(evt.provider_session_id)}`]);
+        return;
+      }
+      if (evt.type === 'finished') {
+        setThinkingBuf('');
+        setDiagBuf([]);
+        setBusy(false);
+        return;
+      }
       // Any "real" output clears the transient thinking strip.
-      if (['text', 'tool_call', 'finished', 'error'].includes(evt.type)) {
+      if (['text', 'tool_call', 'error'].includes(evt.type)) {
         setThinkingBuf('');
       }
       setMessages((prev) => [...prev, evt]);
-      if (evt.type === 'finished') setBusy(false);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
@@ -160,6 +176,8 @@ export default function App() {
   };
 
   const loadHistory = async (convId) => {
+    setDiagBuf([]);
+    setThinkingBuf('');
     if (!convId) {
       setMessages([]);
       return;
@@ -227,6 +245,7 @@ export default function App() {
     if (!prompt || !providerId || !activeConvId || busy) return;
     setMessages((prev) => [...prev, { type: 'user', delta: prompt }]);
     setThinkingBuf('');
+    setDiagBuf([]);
     setBusy(true);
     setInput('');
     try {
@@ -252,6 +271,7 @@ export default function App() {
     // while the cancel round-trip happens.
     setBusy(false);
     setThinkingBuf('');
+    setDiagBuf([]);
     setMessages((prev) => [...prev, { type: 'meta_info', text: '— 已取消 —' }]);
     await invoke('cancel_session', { sessionId }).catch(() => {});
   };
@@ -357,6 +377,12 @@ export default function App() {
             </div>
           )}
 
+          {busy && diagBuf.length > 0 && (
+            <div className="diag-strip">
+              {diagBuf.map((line, i) => <span className="diag-chip" key={i}>{line}</span>)}
+            </div>
+          )}
+
           <footer className="composer">
             <textarea
               value={input}
@@ -410,4 +436,8 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function shortId(id) {
+  return (id || '').slice(0, 8);
 }
