@@ -360,12 +360,16 @@ async fn chat(
                     provider_session_id,
                 );
             }
-            if let Ok(v) = serde_json::to_value(&evt) {
-                let _ = ConversationStore::append_history(
-                    &workspace_for_persist,
-                    &conv_id_for_persist,
-                    &v,
-                );
+            // Thinking is transient: shown live in the UI strip and dropped
+            // from JSONL so replays stay clean.
+            if !matches!(evt, AgentEvent::Thinking { .. }) {
+                if let Ok(v) = serde_json::to_value(&evt) {
+                    let _ = ConversationStore::append_history(
+                        &workspace_for_persist,
+                        &conv_id_for_persist,
+                        &v,
+                    );
+                }
             }
             if tx_for_run.send(evt).await.is_err() {
                 break;

@@ -21,6 +21,12 @@ pub enum AgentEvent {
         session_id: String,
         delta: String,
     },
+    /// Extended-thinking content. Displayed as a transient strip in the
+    /// client and NOT persisted to conversation history.
+    Thinking {
+        session_id: String,
+        delta: String,
+    },
     ToolCall {
         session_id: String,
         name: String,

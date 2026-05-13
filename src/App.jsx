@@ -27,10 +27,12 @@ export default function App() {
   const [activeConvId, setActiveConvId] = useState(null);
 
   const [messages, setMessages] = useState([]);
+  const [thinkingBuf, setThinkingBuf] = useState('');
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
+  const thinkingRef = useRef(null);
 
   const [showPwModal, setShowPwModal] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -58,11 +60,23 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen('agent:event', (e) => {
       const evt = e.payload;
+      if (evt.type === 'thinking') {
+        setThinkingBuf((prev) => prev + (evt.delta || ''));
+        return;
+      }
+      // Any "real" output clears the transient thinking strip.
+      if (['text', 'tool_call', 'finished', 'error'].includes(evt.type)) {
+        setThinkingBuf('');
+      }
       setMessages((prev) => [...prev, evt]);
       if (evt.type === 'finished') setBusy(false);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
+
+  useEffect(() => {
+    thinkingRef.current?.scrollTo({ top: thinkingRef.current.scrollHeight });
+  }, [thinkingBuf]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -205,6 +219,7 @@ export default function App() {
     const prompt = input.trim();
     if (!prompt || !providerId || !activeConvId || busy) return;
     setMessages((prev) => [...prev, { type: 'user', delta: prompt }]);
+    setThinkingBuf('');
     setBusy(true);
     setInput('');
     try {
@@ -312,6 +327,13 @@ export default function App() {
             {messages.map((m, i) => <MessageRow key={i} msg={m} />)}
             <div ref={endRef} />
           </main>
+
+          {thinkingBuf && (
+            <div className="thinking-strip" ref={thinkingRef}>
+              <div className="thinking-head">思考中…</div>
+              <div className="thinking-body">{thinkingBuf}</div>
+            </div>
+          )}
 
           <footer className="composer">
             <textarea

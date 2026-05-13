@@ -194,6 +194,21 @@ async fn emit_from_claude_jsonl(session_id: &str, line: &str, tx: &mpsc::Sender<
                                 })
                                 .await;
                         }
+                        "thinking" => {
+                            let text = block
+                                .get("thinking")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            if !text.is_empty() {
+                                let _ = tx
+                                    .send(AgentEvent::Thinking {
+                                        session_id: session_id.into(),
+                                        delta: text,
+                                    })
+                                    .await;
+                            }
+                        }
                         _ => {}
                     }
                 }
