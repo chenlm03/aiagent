@@ -5,16 +5,21 @@ import MessageRow from './components/MessageRow.jsx';
 import ProviderBar from './components/ProviderBar.jsx';
 import ServerBar from './components/ServerBar.jsx';
 import ConversationList from './components/ConversationList.jsx';
+import LoginScreen from './components/LoginScreen.jsx';
+import ChangePasswordModal from './components/ChangePasswordModal.jsx';
+import UserAdmin from './components/UserAdmin.jsx';
 
 export default function App() {
   const [serverUrl, setServerUrl] = useState('http://127.0.0.1:8788');
   const [serverStatus, setServerStatus] = useState('unknown');
 
+  const [me, setMe] = useState(null); // { username, role, workspace_root, ... } | null
+  const [authChecked, setAuthChecked] = useState(false);
+
   const [providers, setProviders] = useState([]);
   const [providerId, setProviderId] = useState('');
   const [installed, setInstalled] = useState({});
 
-  const [workspaceRoot, setWorkspaceRoot] = useState('');
   const [workspaceStatus, setWorkspaceStatus] = useState('unknown');
   const [workspaceError, setWorkspaceError] = useState('');
 
@@ -27,19 +32,26 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
 
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  // Initial load: read config, try /me, then bootstrap.
   useEffect(() => {
     (async () => {
       const cfg = await invoke('load_config').catch(() => ({}));
       if (cfg.server_url) setServerUrl(cfg.server_url);
-      if (cfg.workspace_root) setWorkspaceRoot(cfg.workspace_root);
-      await refreshFromServer(cfg.active_provider);
-      if (cfg.workspace_root) {
-        await refreshWorkspace(cfg.workspace_root);
+      await invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'));
+      if (cfg.auth_token) {
+        try {
+          const meResp = await invoke('me');
+          setMe(meResp);
+          await onLoggedIn(meResp, cfg.active_provider, cfg.active_conversation_id);
+        } catch {
+          // stale token — clear it
+          await invoke('logout').catch(() => {});
+        }
       }
-      if (cfg.active_conversation_id && cfg.workspace_root) {
-        setActiveConvId(cfg.active_conversation_id);
-        await loadHistory(cfg.active_conversation_id, cfg.workspace_root);
-      }
+      setAuthChecked(true);
     })();
   }, []);
 
@@ -56,10 +68,8 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const refreshFromServer = async (preferredId) => {
+  const refreshProviders = async (preferredId) => {
     try {
-      await invoke('ping_server');
-      setServerStatus('ok');
       const list = await invoke('list_providers');
       setProviders(list);
       const chosen = preferredId && list.find((p) => p.id === preferredId)
@@ -73,47 +83,68 @@ export default function App() {
       }));
       setInstalled(map);
     } catch {
-      setServerStatus('error');
       setProviders([]);
       setInstalled({});
     }
   };
 
-  const refreshWorkspace = async (root) => {
-    if (!root) {
-      setWorkspaceStatus('unknown');
-      setConversations([]);
-      return;
-    }
+  const refreshConversations = async () => {
     try {
-      const check = await invoke('check_workspace', { workspaceRoot: root });
-      if (!check.ok) {
-        setWorkspaceStatus('error');
-        setWorkspaceError(check.message || '工作区出错');
-        setConversations([]);
-        return;
-      }
+      const convs = await invoke('list_conversations');
+      setConversations(convs);
       setWorkspaceStatus('ok');
       setWorkspaceError('');
-      const convs = await invoke('list_conversations', { workspaceRoot: root });
-      setConversations(convs);
     } catch (err) {
-      setWorkspaceStatus('error');
-      setWorkspaceError(String(err));
+      const msg = String(err);
+      setConversations([]);
+      if (msg.includes('尚未分配工作区')) {
+        setWorkspaceStatus('unassigned');
+      } else {
+        setWorkspaceStatus('error');
+      }
+      setWorkspaceError(msg);
+    }
+  };
+
+  const onLoggedIn = async (meObj, preferredProvider, preferredConvId) => {
+    setMe(meObj);
+    await invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'));
+    await refreshProviders(preferredProvider);
+    if (meObj.workspace_root) {
+      await refreshConversations();
+      if (preferredConvId) {
+        setActiveConvId(preferredConvId);
+        await loadHistory(preferredConvId);
+      }
+    } else {
+      setWorkspaceStatus('unassigned');
       setConversations([]);
     }
   };
 
-  const loadHistory = async (convId, root) => {
-    if (!convId || !root) {
+  const handleLoggedIn = async (loginResp) => {
+    // loginResp = { token, user }
+    await onLoggedIn(loginResp.user, null, null);
+  };
+
+  const onLogout = async () => {
+    await invoke('logout').catch(() => {});
+    setMe(null);
+    setProviders([]);
+    setConversations([]);
+    setActiveConvId(null);
+    setMessages([]);
+    setShowAdmin(false);
+    setShowPwModal(false);
+  };
+
+  const loadHistory = async (convId) => {
+    if (!convId) {
       setMessages([]);
       return;
     }
     try {
-      const events = await invoke('get_conversation_history', {
-        conversationId: convId,
-        workspaceRoot: root,
-      });
+      const events = await invoke('get_conversation_history', { conversationId: convId });
       setMessages(events);
     } catch (err) {
       setMessages([{ type: 'error', message: `加载历史失败：${err}` }]);
@@ -121,34 +152,21 @@ export default function App() {
   };
 
   const persistConfig = async (patch) => {
-    const next = {
-      server_url: serverUrl,
-      active_provider: providerId,
-      workspace_root: workspaceRoot,
-      active_conversation_id: activeConvId,
-      ...patch,
-    };
+    const cur = await invoke('load_config').catch(() => ({}));
+    const next = { ...cur, ...patch };
     await invoke('save_config', { config: next }).catch(() => {});
   };
 
   const onServerUrlCommit = async (url) => {
     setServerUrl(url);
     await persistConfig({ server_url: url });
-    await refreshFromServer(providerId);
-  };
-
-  const onWorkspaceCommit = async (root) => {
-    setWorkspaceRoot(root);
-    setActiveConvId(null);
-    setMessages([]);
-    await persistConfig({ workspace_root: root, active_conversation_id: null });
-    await refreshWorkspace(root);
+    await invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'));
   };
 
   const onSelectConv = async (id) => {
     setActiveConvId(id);
     persistConfig({ active_conversation_id: id });
-    await loadHistory(id, workspaceRoot);
+    await loadHistory(id);
   };
 
   const onDeleteConv = async (conv) => {
@@ -158,10 +176,7 @@ export default function App() {
     );
     if (!ok) return;
     try {
-      await invoke('delete_conversation', {
-        conversationId: conv.id,
-        workspaceRoot,
-      });
+      await invoke('delete_conversation', { conversationId: conv.id });
       setConversations((prev) => prev.filter((c) => c.id !== conv.id));
       if (activeConvId === conv.id) {
         setActiveConvId(null);
@@ -176,11 +191,7 @@ export default function App() {
   const onNewConv = async () => {
     if (workspaceStatus !== 'ok' || !providerId) return;
     try {
-      const conv = await invoke('create_conversation', {
-        workspaceRoot,
-        providerId,
-        name: null,
-      });
+      const conv = await invoke('create_conversation', { providerId, name: null });
       setConversations((prev) => [...prev, conv]);
       setActiveConvId(conv.id);
       setMessages([{ type: 'meta_info', text: `新会话已创建：${conv.name}（目录：${conv.subdir}）` }]);
@@ -202,7 +213,6 @@ export default function App() {
           providerId,
           prompt,
           conversationId: activeConvId,
-          workspaceRoot,
           providerConfig: {},
         },
       });
@@ -218,6 +228,17 @@ export default function App() {
     await invoke('cancel_session', { sessionId });
   };
 
+  if (!authChecked) {
+    return <div className="boot">加载中…</div>;
+  }
+  if (!me) {
+    return (
+      <>
+        <LoginScreen onLoggedIn={handleLoggedIn} />
+      </>
+    );
+  }
+
   const canSend = serverStatus === 'ok'
     && workspaceStatus === 'ok'
     && !!providerId
@@ -227,22 +248,36 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>AI Agent</h1>
+        <div className="header-top">
+          <h1>AI Agent</h1>
+          <div className="user-area">
+            <span className="user-tag">
+              {me.username}
+              <span className={`role-pill ${me.role}`}>
+                {me.role === 'admin' ? '管理员' : '用户'}
+              </span>
+            </span>
+            {me.role === 'admin' && (
+              <button className="btn ghost" onClick={() => setShowAdmin(true)}>用户管理</button>
+            )}
+            <button className="btn ghost" onClick={() => setShowPwModal(true)}>修改密码</button>
+            <button className="btn ghost" onClick={onLogout}>退出登录</button>
+          </div>
+        </div>
         <ServerBar
           serverUrl={serverUrl}
           status={serverStatus}
           onServerUrlCommit={onServerUrlCommit}
-          onRetry={() => refreshFromServer(providerId)}
+          onRetry={() => invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'))}
         />
         <ProviderBar
           providers={providers}
           installed={installed}
           providerId={providerId}
           onProviderChange={(id) => { setProviderId(id); persistConfig({ active_provider: id }); }}
-          workspaceRoot={workspaceRoot}
+          workspaceRoot={me.workspace_root || ''}
           workspaceStatus={workspaceStatus}
           workspaceError={workspaceError}
-          onWorkspaceCommit={onWorkspaceCommit}
         />
       </header>
 
@@ -260,7 +295,12 @@ export default function App() {
 
         <div className="chat-pane">
           <main className="messages">
-            {messages.length === 0 && (
+            {workspaceStatus === 'unassigned' && (
+              <div className="empty">
+                你的账户还没有分配工作区，请联系管理员到「用户管理」里为你指派一个工作区根目录。
+              </div>
+            )}
+            {workspaceStatus === 'ok' && messages.length === 0 && (
               <div className="empty">
                 {!activeConvId
                   ? '在左侧选择或新建一个会话。'
@@ -303,6 +343,27 @@ export default function App() {
           </footer>
         </div>
       </div>
+
+      {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} />}
+      {showAdmin && (
+        <UserAdmin
+          currentUsername={me.username}
+          onClose={async () => {
+            setShowAdmin(false);
+            // Refresh own info — admin may have changed own workspace.
+            try {
+              const meResp = await invoke('me');
+              setMe(meResp);
+              if (meResp.workspace_root) {
+                await refreshConversations();
+              } else {
+                setWorkspaceStatus('unassigned');
+                setConversations([]);
+              }
+            } catch {}
+          }}
+        />
+      )}
     </div>
   );
 }

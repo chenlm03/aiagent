@@ -6,9 +6,11 @@ pub struct AppConfig {
     /// Where the relay server lives. Defaults to http://127.0.0.1:8788.
     pub server_url: Option<String>,
     pub active_provider: Option<String>,
-    /// Workspace root on the SERVER. Conversation subdirs live under this.
-    pub workspace_root: Option<String>,
     pub active_conversation_id: Option<String>,
+    /// Bearer token from /api/login. The workspace_root is now owned by the
+    /// server (per user) and looked up via /api/me, so it's not stored here
+    /// anymore.
+    pub auth_token: Option<String>,
 }
 
 impl AppConfig {

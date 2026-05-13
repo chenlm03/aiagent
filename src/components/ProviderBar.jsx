@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 export default function ProviderBar({
   providers,
   installed,
@@ -8,22 +6,16 @@ export default function ProviderBar({
   workspaceRoot,
   workspaceStatus,
   workspaceError,
-  onWorkspaceCommit,
 }) {
-  const [draft, setDraft] = useState(workspaceRoot);
-  useEffect(() => { setDraft(workspaceRoot); }, [workspaceRoot]);
-
-  const commit = () => {
-    if (draft !== workspaceRoot) onWorkspaceCommit(draft.trim());
-  };
-
   const current = providers.find((p) => p.id === providerId);
   const kindLabel = (k) => k === 'subprocess' ? '子进程' : k === 'api' ? 'API' : k;
   const statusLabel = workspaceStatus === 'ok'
     ? '工作区正常'
-    : workspaceStatus === 'error'
-      ? (workspaceError || '工作区错误')
-      : '未检测';
+    : workspaceStatus === 'unassigned'
+      ? '未分配工作区（请联系管理员）'
+      : workspaceStatus === 'error'
+        ? (workspaceError || '工作区错误')
+        : '未检测';
 
   return (
     <div className="provider-bar">
@@ -38,20 +30,14 @@ export default function ProviderBar({
         </select>
       </label>
 
-      <label className="field grow">
+      <div className="field grow">
         <span>
-          工作区根目录 <span className="muted">（服务器上的绝对路径）</span>
+          工作区根目录 <span className="muted">（由管理员指派）</span>
         </span>
-        <input
-          type="text"
-          spellCheck={false}
-          placeholder="/home/nick/myproject"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-        />
-      </label>
+        <div className="workspace-display">
+          {workspaceRoot || <span className="muted">未分配</span>}
+        </div>
+      </div>
 
       <div className={`status status-${workspaceStatus}`} title={workspaceError}>
         <span className="dot" />

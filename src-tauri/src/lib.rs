@@ -28,11 +28,20 @@ pub fn run() {
             commands::load_config,
             commands::save_config,
             commands::ping_server,
-            commands::check_workspace,
             commands::list_conversations,
             commands::create_conversation,
             commands::delete_conversation,
             commands::get_conversation_history,
+            commands::login,
+            commands::logout,
+            commands::me,
+            commands::change_password,
+            commands::admin_list_users,
+            commands::admin_create_user,
+            commands::admin_delete_user,
+            commands::admin_set_password,
+            commands::admin_set_workspace,
+            commands::admin_check_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
