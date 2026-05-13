@@ -11,6 +11,8 @@ pub struct AppConfig {
     /// server (per user) and looked up via /api/me, so it's not stored here
     /// anymore.
     pub auth_token: Option<String>,
+    /// UI theme: "light" (default) or "dark".
+    pub theme: Option<String>,
 }
 
 impl AppConfig {

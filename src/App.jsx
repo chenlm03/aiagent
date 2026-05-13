@@ -37,11 +37,18 @@ export default function App() {
   const [showPwModal, setShowPwModal] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
 
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   // Initial load: read config, try /me, then bootstrap.
   useEffect(() => {
     (async () => {
       const cfg = await invoke('load_config').catch(() => ({}));
       if (cfg.server_url) setServerUrl(cfg.server_url);
+      if (cfg.theme === 'dark' || cfg.theme === 'light') setTheme(cfg.theme);
       await invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'));
       if (cfg.auth_token) {
         try {
@@ -272,6 +279,15 @@ export default function App() {
                 {me.role === 'admin' ? '管理员' : '用户'}
               </span>
             </span>
+            <button
+              className="theme-toggle"
+              title={theme === 'light' ? '切换到深色' : '切换到浅色'}
+              onClick={() => {
+                const next = theme === 'light' ? 'dark' : 'light';
+                setTheme(next);
+                persistConfig({ theme: next });
+              }}
+            >{theme === 'light' ? '🌙 深色' : '☀ 浅色'}</button>
             {me.role === 'admin' && (
               <button className="btn ghost" onClick={() => setShowAdmin(true)}>用户管理</button>
             )}

@@ -1,11 +1,27 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+function Markdown({ children }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+      }}
+    >
+      {children || ''}
+    </ReactMarkdown>
+  );
+}
+
 export default function MessageRow({ msg }) {
   switch (msg.type) {
     case 'user':
-      return <div className="msg user">{msg.delta}</div>;
+      return <div className="msg user md"><Markdown>{msg.delta}</Markdown></div>;
     case 'started':
       return <div className="msg meta">▸ 会话开始（{short(msg.session_id)}）</div>;
     case 'text':
-      return <div className="msg assistant">{msg.delta}</div>;
+      return <div className="msg assistant md"><Markdown>{msg.delta}</Markdown></div>;
     case 'tool_call':
       return (
         <div className="msg tool-call">
@@ -21,7 +37,12 @@ export default function MessageRow({ msg }) {
         </div>
       );
     case 'error':
-      return <div className="msg error">⚠ {msg.message}</div>;
+      return (
+        <div className="msg error md">
+          <span className="error-prefix">⚠ </span>
+          <Markdown>{msg.message}</Markdown>
+        </div>
+      );
     case 'finished':
       return <div className="msg meta">— 完成（{msg.reason}） —</div>;
     case 'provider_session_id':

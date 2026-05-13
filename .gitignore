@@ -19,3 +19,4 @@ Thumbs.db
 # Server-side workspace metadata (not source)
 .aiagent/
 /main/
+/client/
