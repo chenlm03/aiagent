@@ -293,12 +293,10 @@ body {
 
 .msg-thinking {
   color: var(--muted);
-  background: var(--thinking-bg);
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
   height: 120px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-size: 12px;
   font-style: italic;
   margin-bottom: 8px;
@@ -314,6 +312,9 @@ body {
 }
 
 .msg-thinking .thinking-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }

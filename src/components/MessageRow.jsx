@@ -29,9 +29,9 @@ export default function MessageRow({ msg }) {
       return (
         <div className="msg assistant md">
           {msg.thinking && (
-            <div className="msg-thinking" ref={thinkingRef}>
-              <div className="thinking-head">思考中…</div>
-              <div className="thinking-body">{msg.thinking}</div>
+            <div className="msg-thinking">
+              <div className="thinking-head">正在思考中</div>
+              <div className="thinking-body" ref={thinkingRef}>{msg.thinking}</div>
             </div>
           )}
           {msg.delta && <Markdown>{msg.delta}</Markdown>}
