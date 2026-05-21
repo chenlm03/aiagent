@@ -21,8 +21,8 @@ pub enum AgentEvent {
         session_id: String,
         delta: String,
     },
-    /// Extended-thinking content. Displayed as a transient strip in the
-    /// client and NOT persisted to conversation history.
+    /// Extended-thinking/progress content. Displayed transiently in the
+    /// active assistant bubble and NOT persisted to conversation history.
     Thinking {
         session_id: String,
         delta: String,

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -15,11 +16,27 @@ function Markdown({ children }) {
 }
 
 export default function MessageRow({ msg }) {
+  const thinkingRef = useRef(null);
+
+  useEffect(() => {
+    thinkingRef.current?.scrollTo({ top: thinkingRef.current.scrollHeight });
+  }, [msg.thinking]);
+
   switch (msg.type) {
     case 'user':
       return <div className="msg user md"><Markdown>{msg.delta}</Markdown></div>;
     case 'text':
-      return <div className="msg assistant md"><Markdown>{msg.delta}</Markdown></div>;
+      return (
+        <div className="msg assistant md">
+          {msg.thinking && (
+            <div className="msg-thinking" ref={thinkingRef}>
+              <div className="thinking-head">思考中…</div>
+              <div className="thinking-body">{msg.thinking}</div>
+            </div>
+          )}
+          {msg.delta && <Markdown>{msg.delta}</Markdown>}
+        </div>
+      );
     case 'tool_call':
       return (
         <div className="msg tool-call">

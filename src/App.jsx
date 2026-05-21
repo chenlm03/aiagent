@@ -27,13 +27,11 @@ export default function App() {
   const [activeConvId, setActiveConvId] = useState(null);
 
   const [messages, setMessages] = useState([]);
-  const [thinkingBuf, setThinkingBuf] = useState('');
   const [diagBuf, setDiagBuf] = useState([]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
-  const thinkingRef = useRef(null);
 
   const [showPwModal, setShowPwModal] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -69,7 +67,7 @@ export default function App() {
     const unlisten = listen('agent:event', (e) => {
       const evt = e.payload;
       if (evt.type === 'thinking') {
-        setThinkingBuf((prev) => prev + (evt.delta || ''));
+        setMessages((prev) => appendThinking(prev, evt));
         return;
       }
       // Diagnostic events: shown live in the bottom strip while busy,
@@ -83,26 +81,20 @@ export default function App() {
         return;
       }
       if (evt.type === 'finished') {
-        setThinkingBuf('');
+        setMessages((prev) => finishAssistantThinking(prev, evt.session_id));
         setDiagBuf([]);
         setBusy(false);
         return;
       }
-      // Any "real" output clears the transient thinking strip.
-      if (['text', 'tool_call', 'error'].includes(evt.type)) {
-        setThinkingBuf('');
-      }
       if (evt.type === 'error') {
+        setMessages((prev) => appendOrMergeText(finishAssistantThinking(prev, evt.session_id), evt));
         setBusy(false);
+        return;
       }
       setMessages((prev) => appendOrMergeText(prev, evt));
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
-
-  useEffect(() => {
-    thinkingRef.current?.scrollTo({ top: thinkingRef.current.scrollHeight });
-  }, [thinkingBuf]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -194,7 +186,6 @@ export default function App() {
 
   const loadHistory = async (convId) => {
     setDiagBuf([]);
-    setThinkingBuf('');
     if (!convId) {
       setMessages([]);
       return;
@@ -277,7 +268,6 @@ export default function App() {
       return;
     }
     setMessages((prev) => [...prev, { type: 'user', delta: prompt }]);
-    setThinkingBuf('');
     setDiagBuf([]);
     setBusy(true);
     setInput('');
@@ -303,7 +293,6 @@ export default function App() {
     // client will also fire, but we don't want the user staring at a spinner
     // while the cancel round-trip happens.
     setBusy(false);
-    setThinkingBuf('');
     setDiagBuf([]);
     setMessages((prev) => [...prev, { type: 'meta_info', text: '— 已取消 —' }]);
     await invoke('cancel_session', { sessionId }).catch(() => {});
@@ -328,7 +317,6 @@ export default function App() {
     if (activeConv && activeConv.provider_id !== id) {
       setActiveConvId(null);
       setMessages([]);
-      setThinkingBuf('');
       setDiagBuf([]);
       patch.active_conversation_id = null;
     }
@@ -419,13 +407,6 @@ export default function App() {
             <div ref={endRef} />
           </main>
 
-          {thinkingBuf && (
-            <div className="thinking-strip" ref={thinkingRef}>
-              <div className="thinking-head">思考中…</div>
-              <div className="thinking-body">{thinkingBuf}</div>
-            </div>
-          )}
-
           {busy && diagBuf.length > 0 && (
             <div className="diag-strip">
               {diagBuf.map((line, i) => <span className="diag-chip" key={i}>{line}</span>)}
@@ -493,17 +474,55 @@ function shortId(id) {
   return (id || '').slice(0, 8);
 }
 
-// Fold consecutive 'text' events from the same provider session into one
-// bubble. Without this, providers that stream stdout line-by-line (codex)
-// break markdown structure into one bubble per line.
+function appendThinking(messages, evt) {
+  const delta = evt.delta || '';
+  if (!delta) return messages;
+  const idx = findLiveAssistantIndex(messages, evt.session_id);
+  if (idx >= 0) {
+    const next = [...messages];
+    const msg = next[idx];
+    next[idx] = { ...msg, thinking: (msg.thinking || '') + delta };
+    return next;
+  }
+  return [...messages, {
+    type: 'text',
+    session_id: evt.session_id,
+    delta: '',
+    thinking: delta,
+  }];
+}
+
+// Fold consecutive text deltas from the same provider session into one bubble.
+// Thinking is kept in that same bubble until the server sends `finished`.
 function appendOrMergeText(messages, evt) {
   if (evt.type !== 'text') return [...messages, evt];
-  const last = messages[messages.length - 1];
-  if (last && last.type === 'text' && last.session_id === evt.session_id) {
-    return [
-      ...messages.slice(0, -1),
-      { ...last, delta: (last.delta || '') + (evt.delta || '') },
-    ];
+  const idx = findLiveAssistantIndex(messages, evt.session_id);
+  if (idx >= 0) {
+    const next = [...messages];
+    const msg = next[idx];
+    next[idx] = { ...msg, delta: (msg.delta || '') + (evt.delta || '') };
+    return next;
   }
   return [...messages, evt];
+}
+
+function finishAssistantThinking(messages, sessionId) {
+  if (!sessionId) return messages;
+  return messages.flatMap((msg) => {
+    if (msg.type !== 'text' || msg.session_id !== sessionId || !msg.thinking) {
+      return [msg];
+    }
+    const { thinking, ...rest } = msg;
+    return rest.delta ? [rest] : [];
+  });
+}
+
+function findLiveAssistantIndex(messages, sessionId) {
+  if (!sessionId) return -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.type === 'text' && msg.session_id === sessionId) return i;
+    if (msg.type === 'user' || msg.type === 'error' || msg.type === 'meta_info') break;
+  }
+  return -1;
 }

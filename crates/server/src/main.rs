@@ -360,7 +360,8 @@ async fn chat(
 
         while let Some(evt) = provider_rx.recv().await {
             if let AgentEvent::ProviderSessionId {
-                provider_session_id, ..
+                provider_session_id,
+                ..
             } = &evt
             {
                 let _ = ConversationStore::update_provider_session_id(
@@ -369,8 +370,8 @@ async fn chat(
                     provider_session_id,
                 );
             }
-            // Thinking is transient: shown live in the UI strip and dropped
-            // from JSONL so replays stay clean.
+            // Thinking is transient: shown live in the active assistant bubble
+            // and dropped from JSONL so replays stay clean.
             if !matches!(evt, AgentEvent::Thinking { .. }) {
                 if let Ok(v) = serde_json::to_value(&evt) {
                     let _ = ConversationStore::append_history(
@@ -577,4 +578,3 @@ async fn admin_check_workspace(
         }),
     }
 }
-

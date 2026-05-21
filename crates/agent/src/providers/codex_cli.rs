@@ -108,18 +108,15 @@ impl AgentProvider for CodexCli {
         let stdout_tx = tx.clone();
         let stdout_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
-            let mut pending_agent_text = None;
+            let mut stream_state = CodexStreamState::default();
             while let Some(line) = reader.next_line().await? {
-                emit_from_codex_jsonl(
-                    &stdout_session_id,
-                    &line,
-                    &stdout_tx,
-                    &mut pending_agent_text,
-                )
-                .await;
+                emit_from_codex_jsonl(&stdout_session_id, &line, &stdout_tx, &mut stream_state)
+                    .await;
             }
-            if let Some(text) = pending_agent_text.take() {
-                emit_text(&stdout_session_id, &stdout_tx, &text).await;
+            if !stream_state.streamed_agent_text {
+                if let Some(text) = stream_state.fallback_agent_text.take() {
+                    emit_text(&stdout_session_id, &stdout_tx, &text).await;
+                }
             }
             Ok::<(), anyhow::Error>(())
         });
@@ -213,14 +210,21 @@ impl AgentProvider for CodexCli {
     }
 }
 
+#[derive(Default)]
+struct CodexStreamState {
+    streamed_agent_text: bool,
+    fallback_agent_text: Option<String>,
+}
+
 /// Translate one Codex CLI `exec --json` JSONL event into the provider-agnostic
 /// event stream. Codex does not expose raw hidden chain-of-thought; the UI gets
-/// high-level progress/status lines while waiting, then the final answer.
+/// high-level progress/status lines and streams visible answer deltas as soon as
+/// Codex emits them.
 async fn emit_from_codex_jsonl(
     session_id: &str,
     line: &str,
     tx: &mpsc::Sender<AgentEvent>,
-    pending_agent_text: &mut Option<String>,
+    state: &mut CodexStreamState,
 ) {
     let line = line.trim();
     if line.is_empty() {
@@ -270,20 +274,24 @@ async fn emit_from_codex_jsonl(
         }
         "item.completed" => {
             if let Some(item) = v.get("item") {
-                emit_codex_item_completed(session_id, item, tx, pending_agent_text).await;
+                emit_codex_item_completed(session_id, item, tx, state).await;
             }
         }
         "turn.completed" => {
-            let text = pending_agent_text
-                .take()
-                .or_else(|| string_field(&v, &["last_agent_message"]).map(str::to_string));
-            if let Some(text) = text {
-                emit_text(session_id, tx, &text).await;
+            if !state.streamed_agent_text {
+                let text = state
+                    .fallback_agent_text
+                    .take()
+                    .or_else(|| string_field(&v, &["last_agent_message"]).map(str::to_string));
+                if let Some(text) = text {
+                    emit_text(session_id, tx, &text).await;
+                }
             }
         }
         _ if kind.contains("agent_message") && kind.contains("delta") => {
             if let Some(delta) = string_field(&v, &["delta", "text"]) {
-                append_pending_agent_text(pending_agent_text, delta);
+                state.streamed_agent_text = true;
+                emit_text(session_id, tx, delta).await;
             }
         }
         _ if kind.contains("reasoning") && kind.contains("delta") => {
@@ -299,7 +307,7 @@ async fn emit_codex_item_completed(
     session_id: &str,
     item: &serde_json::Value,
     tx: &mpsc::Sender<AgentEvent>,
-    pending_agent_text: &mut Option<String>,
+    state: &mut CodexStreamState,
 ) {
     let item_type = item.get("type").and_then(|x| x.as_str()).unwrap_or("");
     match item_type {
@@ -308,8 +316,8 @@ async fn emit_codex_item_completed(
                 let phase = item.get("phase").and_then(|x| x.as_str()).unwrap_or("");
                 if phase == "commentary" {
                     emit_thinking(session_id, tx, &format!("{text}\n")).await;
-                } else {
-                    replace_pending_agent_text(session_id, tx, pending_agent_text, text).await;
+                } else if !state.streamed_agent_text {
+                    replace_fallback_agent_text(session_id, tx, state, text).await;
                 }
             }
         }
@@ -326,25 +334,16 @@ async fn emit_codex_item_completed(
     }
 }
 
-fn append_pending_agent_text(pending_agent_text: &mut Option<String>, delta: &str) {
-    if delta.is_empty() {
-        return;
-    }
-    pending_agent_text
-        .get_or_insert_with(String::new)
-        .push_str(delta);
-}
-
-async fn replace_pending_agent_text(
+async fn replace_fallback_agent_text(
     session_id: &str,
     tx: &mpsc::Sender<AgentEvent>,
-    pending_agent_text: &mut Option<String>,
+    state: &mut CodexStreamState,
     text: &str,
 ) {
     if text.is_empty() {
         return;
     }
-    if let Some(previous) = pending_agent_text.replace(text.to_string()) {
+    if let Some(previous) = state.fallback_agent_text.replace(text.to_string()) {
         emit_thinking(session_id, tx, &format!("{previous}\n")).await;
     }
 }
