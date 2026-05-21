@@ -92,6 +92,9 @@ export default function App() {
       if (['text', 'tool_call', 'error'].includes(evt.type)) {
         setThinkingBuf('');
       }
+      if (evt.type === 'error') {
+        setBusy(false);
+      }
       setMessages((prev) => appendOrMergeText(prev, evt));
     });
     return () => { unlisten.then((fn) => fn()); };
@@ -109,9 +112,14 @@ export default function App() {
     try {
       const list = await invoke('list_providers');
       setProviders(list);
-      const chosen = preferredId && list.find((p) => p.id === preferredId)
+      const preferred = preferredId && list.find((p) => p.id === preferredId)
         ? preferredId
-        : list[0]?.id || '';
+        : null;
+      const chosen = preferred
+        || list.find((p) => p.id === 'codex-cli')?.id
+        || list.find((p) => p.id === 'claude-code-cli')?.id
+        || list[0]?.id
+        || '';
       setProviderId(chosen);
 
       const map = {};
@@ -131,6 +139,7 @@ export default function App() {
       setConversations(convs);
       setWorkspaceStatus('ok');
       setWorkspaceError('');
+      return convs;
     } catch (err) {
       const msg = String(err);
       setConversations([]);
@@ -140,6 +149,7 @@ export default function App() {
         setWorkspaceStatus('error');
       }
       setWorkspaceError(msg);
+      return [];
     }
   };
 
@@ -148,10 +158,17 @@ export default function App() {
     await invoke('ping_server').then(() => setServerStatus('ok')).catch(() => setServerStatus('error'));
     await refreshProviders(preferredProvider);
     if (meObj.workspace_root) {
-      await refreshConversations();
+      const convs = await refreshConversations();
       if (preferredConvId) {
-        setActiveConvId(preferredConvId);
-        await loadHistory(preferredConvId);
+        const conv = convs.find((c) => c.id === preferredConvId);
+        if (conv) {
+          setActiveConvId(preferredConvId);
+          if (conv.provider_id && conv.provider_id !== providerId) {
+            setProviderId(conv.provider_id);
+            persistConfig({ active_provider: conv.provider_id });
+          }
+          await loadHistory(preferredConvId);
+        }
       }
     } else {
       setWorkspaceStatus('unassigned');
@@ -204,8 +221,15 @@ export default function App() {
   };
 
   const onSelectConv = async (id) => {
+    const conv = conversations.find((c) => c.id === id);
     setActiveConvId(id);
-    persistConfig({ active_conversation_id: id });
+    if (conv?.provider_id && conv.provider_id !== providerId) {
+      setProviderId(conv.provider_id);
+    }
+    persistConfig({
+      active_conversation_id: id,
+      ...(conv?.provider_id ? { active_provider: conv.provider_id } : {}),
+    });
     await loadHistory(id);
   };
 
@@ -244,6 +268,14 @@ export default function App() {
   const send = async () => {
     const prompt = input.trim();
     if (!prompt || !providerId || !activeConvId || busy) return;
+    const activeConv = conversations.find((c) => c.id === activeConvId);
+    if (activeConv && activeConv.provider_id !== providerId) {
+      setMessages((prev) => [...prev, {
+        type: 'error',
+        message: `当前会话属于 ${activeConv.provider_id}，不能用 ${providerId} 继续。请切回匹配模型或新建会话。`,
+      }]);
+      return;
+    }
     setMessages((prev) => [...prev, { type: 'user', delta: prompt }]);
     setThinkingBuf('');
     setDiagBuf([]);
@@ -288,10 +320,26 @@ export default function App() {
     );
   }
 
+  const activeConv = conversations.find((c) => c.id === activeConvId);
+  const providerMatches = !activeConv || activeConv.provider_id === providerId;
+  const onProviderChange = (id) => {
+    setProviderId(id);
+    const patch = { active_provider: id };
+    if (activeConv && activeConv.provider_id !== id) {
+      setActiveConvId(null);
+      setMessages([]);
+      setThinkingBuf('');
+      setDiagBuf([]);
+      patch.active_conversation_id = null;
+    }
+    persistConfig(patch);
+  };
+
   const canSend = serverStatus === 'ok'
     && workspaceStatus === 'ok'
     && !!providerId
     && !!activeConvId
+    && providerMatches
     && !busy;
 
   return (
@@ -332,7 +380,7 @@ export default function App() {
           providers={providers}
           installed={installed}
           providerId={providerId}
-          onProviderChange={(id) => { setProviderId(id); persistConfig({ active_provider: id }); }}
+          onProviderChange={onProviderChange}
           workspaceRoot={me.workspace_root || ''}
           workspaceStatus={workspaceStatus}
           workspaceError={workspaceError}
@@ -388,7 +436,9 @@ export default function App() {
             <textarea
               value={input}
               placeholder={activeConvId
-                ? '说点什么…（Ctrl/Cmd + Enter 发送）'
+                ? providerMatches
+                  ? '说点什么…（Ctrl/Cmd + Enter 发送）'
+                  : '当前会话属于其他模型，请选择匹配会话或新建会话'
                 : '请先选择一个会话'
               }
               onChange={(e) => setInput(e.target.value)}

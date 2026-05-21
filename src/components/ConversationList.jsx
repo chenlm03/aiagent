@@ -26,7 +26,7 @@ export default function ConversationList({
             <button className="conv-body" onClick={() => onSelect(c.id)}>
               <div className="conv-name">{c.name}</div>
               <div className="conv-meta">
-                {c.provider_session_id ? '↻ 续接' : '✦ 新建'} · {c.subdir}
+                {c.provider_id} · {c.provider_session_id ? '↻ 续接' : '✦ 新建'} · {c.subdir}
               </div>
             </button>
             <button

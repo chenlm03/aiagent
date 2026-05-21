@@ -301,6 +301,15 @@ async fn chat(
             StatusCode::NOT_FOUND,
             format!("会话不存在: {}", req.conversation_id),
         ))?;
+    if conv.provider_id != req.provider_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "会话属于 provider {}，不能用 {} 继续。请切回匹配模型或新建会话。",
+                conv.provider_id, req.provider_id
+            ),
+        ));
+    }
 
     let mut provider_config = req.provider_config.clone();
     if let Some(psid) = &conv.provider_session_id {
